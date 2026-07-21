@@ -264,6 +264,8 @@ Run the automated test from a temporary container attached to the same Docker ne
 docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm telegram-proxy-test
 ```
 
+Do not run `scripts/test-telegram-proxy.sh` directly on the host with the default `PROXY_URL=http://xray:8080`. The hostname `xray` is a Docker Compose service name and resolves only from containers attached to `xray-proxy-net`.
+
 The test defaults to the internal HTTP proxy endpoint:
 
 ```env
@@ -277,6 +279,14 @@ PROXY_URL=socks5h://xray:1080 docker compose -f docker-compose.yml -f docker-com
 ```
 
 The test follows redirects, applies connection and total request timeouts, treats HTTP status codes from `200` to `399` as successful, and exits non-zero for proxy, DNS, TLS, timeout, or unsuccessful HTTP status failures. It also disables proxy bypass with `--noproxy ""` and confirms proxy usage from curl diagnostics, such as an HTTP `CONNECT telegram.org:443` tunnel or SOCKS5H remote-DNS evidence.
+
+Before the Telegram request, the test uses `VLESS_URI` to check whether Docker's direct public egress IP already matches the VLESS server IP. If they match, the test exits early because the host VPN or V2box route is probably tunneling Docker traffic through the same server that Dockerized Xray is trying to dial. Disable the host VPN while testing, or add DIRECT/bypass rules for the VLESS server hostname and IP, then restart Docker Desktop.
+
+To skip only that guard:
+
+```sh
+SELF_ROUTE_CHECK=false docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm telegram-proxy-test
+```
 
 If authentication is enabled, the Compose test service reads `PROXY_USERNAME` and `PROXY_PASSWORD` from `.env`. You can also embed credentials directly in the proxy URL:
 
@@ -292,6 +302,9 @@ Target URL: https://telegram.org
 Proxy URL: http://xray:8080
 Connect timeout: 10s
 Request timeout: 30s
+Self-route check: checking Docker egress and VLESS server route
+Self-route check: direct Docker egress is 203.0.113.10; resolving example.com
+Self-route check: VLESS server example.com resolves to 198.51.100.20; no routing loop detected
 
 HTTP status: 200
 Total duration: 1.234567s
@@ -308,6 +321,7 @@ Target URL: https://telegram.org
 Proxy URL: http://bad-proxy:8080
 Connect timeout: 10s
 Request timeout: 30s
+Self-route check: skipped (VLESS server address not provided)
 
 HTTP status: 000
 Total duration: 0.012345s
@@ -442,7 +456,9 @@ docker compose ps
 - REALITY handshake failures: verify SNI/serverName, public key, short ID, fingerprint, flow, and transport against the server profile.
 - Validation rejects plain VLESS to a public server: set `security=tls` or `security=reality`, unless your server is private/trusted or uses VLESS encryption.
 - `curl` works from the host but not another container: confirm the other container is on `xray-proxy-net` and uses `xray-proxy` as hostname.
-- Automated Telegram test reports proxy DNS failure: confirm the proxy container is running with `docker compose ps`, and use a proxy URL such as `http://xray:8080` or `socks5h://xray:1080`.
+- Automated Telegram test reports `Could not resolve proxy: xray`: run it through Compose with `docker compose -f docker-compose.yml -f docker-compose.test.yml run --rm telegram-proxy-test`. The hostname `xray` does not resolve from the host shell.
+- Automated Telegram test reports proxy DNS failure from inside Compose: confirm the proxy container is running with `docker compose ps`, and use a proxy URL such as `http://xray:8080` or `socks5h://xray:1080`.
+- Automated Telegram test reports that Docker direct egress matches the VLESS server IP: disable V2box or add DIRECT/bypass rules for the VLESS server hostname and IP, restart Docker Desktop, then retry.
 - Automated Telegram test reports proxy unreachable: confirm the Xray service is healthy, the selected internal port is enabled, and the test command includes both `docker-compose.yml` and `docker-compose.test.yml`.
 - Automated Telegram test reports TLS failure: check the upstream VLESS TLS/REALITY settings, system clock, certificate trust, SNI/serverName, public key, short ID, fingerprint, flow, and transport.
 - Automated Telegram test reports timeout: increase `CONNECT_TIMEOUT` or `MAX_TIME` only after confirming the proxy logs do not show authentication or upstream connection failures.

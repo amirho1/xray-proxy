@@ -12,6 +12,13 @@ services:
       CONNECT_TIMEOUT: "${CONNECT_TIMEOUT:-10}"
       MAX_TIME: "${MAX_TIME:-30}"
       MAX_REDIRS: "${MAX_REDIRS:-5}"
+      VLESS_URI: "${VLESS_URI:-}"
+      VLESS_SERVER_ADDRESS: "${VLESS_SERVER_ADDRESS:-}"
+      VLESS_SERVER_PORT: "${VLESS_SERVER_PORT:-}"
+      SELF_ROUTE_CHECK: "${SELF_ROUTE_CHECK:-auto}"
+      DIRECT_IP_URL: "${DIRECT_IP_URL:-https://api.ipify.org}"
+      SELF_ROUTE_CONNECT_TIMEOUT: "${SELF_ROUTE_CONNECT_TIMEOUT:-5}"
+      SELF_ROUTE_MAX_TIME: "${SELF_ROUTE_MAX_TIME:-5}"
     volumes:
       - type: bind
         source: .
