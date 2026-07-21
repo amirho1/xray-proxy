@@ -1,0 +1,23 @@
+services:
+  telegram-proxy-test:
+    image: curlimages/curl:latest
+    profiles:
+      - test
+    working_dir: /work
+    entrypoint: ["/bin/sh", "/work/scripts/test-telegram-proxy.sh"]
+    environment:
+      PROXY_URL: "${PROXY_URL:-http://xray:8080}"
+      PROXY_USERNAME: "${PROXY_USERNAME:-}"
+      PROXY_PASSWORD: "${PROXY_PASSWORD:-}"
+      CONNECT_TIMEOUT: "${CONNECT_TIMEOUT:-10}"
+      MAX_TIME: "${MAX_TIME:-30}"
+      MAX_REDIRS: "${MAX_REDIRS:-5}"
+    volumes:
+      - type: bind
+        source: .
+        target: /work
+        read_only: true
+        bind:
+          create_host_path: false
+    networks:
+      - xray-proxy

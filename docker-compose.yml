@@ -1,0 +1,64 @@
+name: ${COMPOSE_PROJECT_NAME:-xray-proxy}
+
+services:
+  xray:
+    image: ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG:-26.7.11}
+    container_name: ${XRAY_CONTAINER_NAME:-xray-proxy}
+    entrypoint: ["/usr/local/bin/xray"]
+    command: ["run", "-config", "/usr/local/etc/xray/config.json"]
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - type: bind
+        source: ./config
+        target: /usr/local/etc/xray
+        read_only: true
+        bind:
+          create_host_path: false
+    expose:
+      - "${HTTP_PROXY_PORT:-8080}"
+      - "${SOCKS_PROXY_PORT:-1080}"
+    networks:
+      xray-proxy:
+        aliases:
+          - ${XRAY_NETWORK_ALIAS:-xray-proxy}
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/xray", "run", "-test", "-config", "/usr/local/etc/xray/config.json"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    stop_grace_period: 30s
+
+  config-renderer:
+    image: node:22-alpine
+    profiles:
+      - tools
+    working_dir: /work
+    environment:
+      ALLOW_UNAUTHENTICATED_PROXY: ${ALLOW_UNAUTHENTICATED_PROXY:-false}
+      ENABLE_SOCKS: ${ENABLE_SOCKS:-true}
+      HTTP_PROXY_PORT: ${HTTP_PROXY_PORT:-8080}
+      PROXY_PASSWORD: ${PROXY_PASSWORD:-}
+      PROXY_USERNAME: ${PROXY_USERNAME:-}
+      SOCKS_ENABLE_UDP: ${SOCKS_ENABLE_UDP:-false}
+      SOCKS_PROXY_PORT: ${SOCKS_PROXY_PORT:-1080}
+      VLESS_URI: ${VLESS_URI:-}
+      XRAY_ACCESS_LOG: ${XRAY_ACCESS_LOG:-none}
+      XRAY_CONFIG_PATH: ${XRAY_CONFIG_PATH:-config/config.json}
+      XRAY_ERROR_LOG: ${XRAY_ERROR_LOG:-}
+      XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
+    volumes:
+      - ./:/work
+    command: ["node", "scripts/render-config.mjs"]
+    network_mode: "none"
+
+networks:
+  xray-proxy:
+    name: ${XRAY_NETWORK_NAME:-xray-proxy-net}
+    driver: bridge
