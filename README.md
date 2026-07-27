@@ -10,6 +10,7 @@ The service uses the official Xray-core Docker image, `ghcr.io/xtls/xray-core`, 
 - `docker-compose.host.example.yml`: optional override for publishing proxy ports on the Docker host.
 - `docker-compose.test.yml`: optional curl-based Telegram proxy test service.
 - `.env.example`: configurable values and placeholders.
+- `scripts/init-config.sh`: Compose init script that creates `config/config.json` automatically.
 - `scripts/render-config.mjs`: converts `VLESS_URI` and proxy settings into `config/config.json`.
 - `scripts/test-telegram-proxy.sh`: runs an HTTPS request test through the Docker proxy.
 - `config/config.example.json`: readable example of the generated Xray config shape.
@@ -25,6 +26,7 @@ xray-proxy/
 ├── .env
 ├── scripts/
 │   ├── render-config.mjs
+│   ├── init-config.sh
 │   └── test-telegram-proxy.sh
 └── config/
     ├── config.example.json
@@ -61,30 +63,13 @@ Edit `.env` and set:
 - `PROXY_USERNAME` and `PROXY_PASSWORD` to strong values.
 - `ENABLE_SOCKS=true` or `false`, depending on whether you want SOCKS5.
 
-Render the Xray config:
-
-```sh
-docker compose --profile tools run --rm config-renderer
-```
-
-Confirm the generated config is a file:
-
-```sh
-ls -la config config/config.json
-file config/config.json
-```
-
-Validate before starting:
-
-```sh
-docker compose run --rm --no-deps xray run -test -config /usr/local/etc/xray/config.json
-```
-
 Start the service:
 
 ```sh
 docker compose up -d
 ```
+
+On startup, Compose runs the one-shot `xray-init` service first. It executes `scripts/init-config.sh`, renders `config/config.json` from `.env`, and starts Xray only after the config exists.
 
 By default, other containers on `xray-proxy-net` can reach:
 
@@ -160,22 +145,22 @@ Do not mix fields from different VLESS links. UUID, server, port, SNI, public ke
 
 ## Service Commands
 
-Render or re-render after editing `.env`:
+Start or restart, rendering `config/config.json` automatically before Xray starts:
 
 ```sh
-docker compose --profile tools run --rm config-renderer
+docker compose up -d
+```
+
+Render or re-render manually after editing `.env`:
+
+```sh
+docker compose run --rm xray-init
 ```
 
 Validate generated config:
 
 ```sh
 docker compose run --rm --no-deps xray run -test -config /usr/local/etc/xray/config.json
-```
-
-Start:
-
-```sh
-docker compose up -d
 ```
 
 Stop:
@@ -187,8 +172,6 @@ docker compose down
 Restart after changing `.env`:
 
 ```sh
-docker compose --profile tools run --rm config-renderer
-docker compose run --rm --no-deps xray run -test -config /usr/local/etc/xray/config.json
 docker compose up -d --force-recreate
 ```
 
@@ -438,13 +421,13 @@ docker compose logs -f xray
 
 Common problems:
 
-- Missing `config/config.json`: run the renderer.
+- Missing `config/config.json`: run `docker compose run --rm xray-init`, or start the stack with `docker compose up -d`.
 - `read /usr/local/etc/xray/config.json: is a directory`: the host path `config/config.json` is a directory. Stop the stack, remove the empty directory, render the config again, validate, then start:
 
 ```sh
 docker compose down --remove-orphans
 rmdir config/config.json
-docker compose --profile tools run --rm config-renderer
+docker compose run --rm xray-init
 file config/config.json
 docker compose run --rm --no-deps xray run -test -config /usr/local/etc/xray/config.json
 docker compose up -d
