@@ -1,7 +1,18 @@
 services:
+  xray-init:
+    volumes:
+      - type: volume
+        source: xray-config
+        target: /work/config
+
   xray:
     networks:
       dokploy-network: {}
+    volumes:
+      - type: volume
+        source: xray-config
+        target: /usr/local/etc/xray
+        read_only: true
     labels:
       - "traefik.enable=true"
       - "traefik.docker.network=${DOKPLOY_NETWORK_NAME:-dokploy-network}"
@@ -17,3 +28,6 @@ networks:
   dokploy-network:
     external: true
     name: ${DOKPLOY_NETWORK_NAME:-dokploy-network}
+
+volumes:
+  xray-config:

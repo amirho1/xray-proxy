@@ -220,6 +220,8 @@ https://USER:PASS@proxy.insta-shop.ir:443
 
 This override does not make Xray speak TLS. Xray keeps listening as a plain HTTP forward proxy on the internal Docker port `8080`. Dokploy's Traefik terminates the public Let's Encrypt TLS connection, then forwards the decrypted TCP stream to Xray. This preserves HTTP `CONNECT` requests, which normal Traefik HTTP routers do not handle correctly for forward-proxy use.
 
+For Dokploy deployments, the generated `config.json` is shared between `xray-init` and `xray` through the Compose-managed `xray-config` Docker volume. This keeps Xray from depending on a mutable cloned repo path after deployment. Local non-Dokploy Compose still writes `config/config.json` in the project directory.
+
 Configure these values in `.env` or in Dokploy environment variables:
 
 ```env
@@ -268,6 +270,13 @@ curl -v --proxy "https://USER:PASS@proxy.insta-shop.ir:443" https://api.ipify.or
 ```
 
 The curl trace should show an HTTP `CONNECT` tunnel before the destination TLS handshake. The returned IP should be the remote VLESS egress IP or the upstream route configured by that server.
+
+If `xray` is unhealthy in Dokploy, confirm the shared config volume contains the rendered config:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dokploy.yml exec xray \
+  /usr/local/bin/xray run -test -config /usr/local/etc/xray/config.json
+```
 
 ## Test With curl
 
