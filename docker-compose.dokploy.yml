@@ -1,0 +1,19 @@
+services:
+  xray:
+    networks:
+      dokploy-network: {}
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=${DOKPLOY_NETWORK_NAME:-dokploy-network}"
+      - "traefik.tcp.routers.xray-public-proxy.rule=HostSNI(`${PUBLIC_PROXY_DOMAIN:-proxy.insta-shop.ir}`)"
+      - "traefik.tcp.routers.xray-public-proxy.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
+      - "traefik.tcp.routers.xray-public-proxy.tls=true"
+      - "traefik.tcp.routers.xray-public-proxy.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"
+      - "traefik.tcp.routers.xray-public-proxy.tls.passthrough=false"
+      - "traefik.tcp.routers.xray-public-proxy.service=xray-public-proxy"
+      - "traefik.tcp.services.xray-public-proxy.loadbalancer.server.port=${HTTP_PROXY_PORT:-8080}"
+
+networks:
+  dokploy-network:
+    external: true
+    name: ${DOKPLOY_NETWORK_NAME:-dokploy-network}

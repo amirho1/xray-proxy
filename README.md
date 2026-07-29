@@ -8,6 +8,7 @@ The service uses the official Xray-core Docker image, `ghcr.io/xtls/xray-core`, 
 
 - `docker-compose.yml`: production Compose stack with internal-only proxy exposure.
 - `docker-compose.host.example.yml`: optional override for publishing proxy ports on the Docker host.
+- `docker-compose.dokploy.yml`: optional Dokploy/Traefik TCP TLS override for public HTTPS forward-proxy access.
 - `docker-compose.test.yml`: optional curl-based Telegram proxy test service.
 - `.env.example`: configurable values and placeholders.
 - `scripts/init-config.sh`: Compose init script that creates `config/config.json` automatically.
@@ -22,6 +23,7 @@ Expected directory structure:
 xray-proxy/
 ├── docker-compose.yml
 ├── docker-compose.host.example.yml
+├── docker-compose.dokploy.yml
 ├── docker-compose.test.yml
 ├── .env
 ├── scripts/
@@ -205,6 +207,57 @@ HOST_SOCKS_PROXY_PORT=1080
 ```
 
 Only change `HOST_BIND_IP` to `0.0.0.0` when you have a firewall, strong proxy credentials, and a clear reason to expose the proxy outside the host.
+
+## Dokploy Public HTTPS Proxy
+
+Use `docker-compose.dokploy.yml` when this stack is deployed by Dokploy and you want public users to reach the HTTP forward proxy securely at:
+
+```text
+https://USER:PASS@proxy.insta-shop.ir:443
+```
+
+This override does not make Xray speak TLS. Xray keeps listening as a plain HTTP forward proxy on the internal Docker port `8080`. Dokploy's Traefik terminates the public Let's Encrypt TLS connection, then forwards the decrypted TCP stream to Xray. This preserves HTTP `CONNECT` requests, which normal Traefik HTTP routers do not handle correctly for forward-proxy use.
+
+Configure these values in `.env` or in Dokploy environment variables:
+
+```env
+PUBLIC_PROXY_DOMAIN=proxy.insta-shop.ir
+TRAEFIK_ENTRYPOINT=websecure
+TRAEFIK_CERT_RESOLVER=letsencrypt
+DOKPLOY_NETWORK_NAME=dokploy-network
+```
+
+In Dokploy, remove any Domains-tab HTTP route for `proxy.insta-shop.ir`. A forward proxy must use the TCP labels in `docker-compose.dokploy.yml`, not a normal HTTPS web-app route.
+
+In Dokploy Advanced settings, set the custom command to:
+
+```sh
+compose -f docker-compose.yml -f docker-compose.dokploy.yml up -d --remove-orphans
+```
+
+Dokploy prefixes custom commands with `docker`, so the command above runs as `docker compose ...`.
+
+Keep public access authenticated:
+
+```env
+ALLOW_UNAUTHENTICATED_PROXY=false
+PROXY_USERNAME=<strong-user>
+PROXY_PASSWORD=<strong-password>
+```
+
+After deployment, confirm Traefik serves the Let's Encrypt certificate:
+
+```sh
+openssl s_client -connect proxy.insta-shop.ir:443 -servername proxy.insta-shop.ir -alpn http/1.1 -brief
+```
+
+Then confirm public proxy traffic reaches Xray and exits through the VLESS server:
+
+```sh
+curl -v --proxy "https://USER:PASS@proxy.insta-shop.ir:443" https://api.ipify.org
+```
+
+The curl trace should show an HTTP `CONNECT` tunnel before the destination TLS handshake. The returned IP should be the remote VLESS egress IP or the upstream route configured by that server.
 
 ## Test With curl
 
@@ -398,6 +451,7 @@ Use `xray-proxy` as the proxy hostname unless you changed `XRAY_NETWORK_ALIAS`.
 - Keep `ALLOW_UNAUTHENTICATED_PROXY=false` unless the proxy is isolated and disposable.
 - Use strong `PROXY_USERNAME` and `PROXY_PASSWORD` values.
 - Do not expose HTTP or SOCKS proxy ports publicly without firewall rules.
+- For public access through Dokploy, expose only the HTTPS TCP router on `proxy.insta-shop.ir`; leave Xray's plain HTTP and SOCKS ports internal.
 - HTTP and SOCKS inbounds do not encrypt traffic between the application and Xray; keep that hop inside Docker networking, localhost, or another trusted network.
 - Prefer `socks5h://` over `socks5://` so DNS is resolved through the proxy path instead of by the client.
 - Treat `.env`, `VLESS_URI`, `config/config.json`, REALITY keys, and proxy credentials as secrets.
@@ -460,3 +514,6 @@ On native Linux, the official image runs as UID `65532`. The renderer writes `co
 - Xray VLESS outbound: https://xtls.github.io/en/config/outbounds/vless.html
 - Xray transport and REALITY settings: https://xtls.github.io/en/config/transport.html and https://xtls.github.io/en/config/transports/reality.html
 - n8n HTTP Request proxy option: https://docs.n8n.io/integrations/builtin/core-nodes/n8n-nodes-base.httprequest/
+- Dokploy Docker Compose domains: https://docs.dokploy.com/docs/core/docker-compose/domains
+- Traefik TCP routers: https://doc.traefik.io/traefik/reference/routing-configuration/tcp/routing/router/
+- Traefik TCP TLS: https://doc.traefik.io/traefik/reference/routing-configuration/tcp/tls/
