@@ -4,6 +4,8 @@ This project runs a reusable HTTP/SOCKS proxy service backed by one VLESS outbou
 
 The service uses the official Xray-core Docker image, `ghcr.io/xtls/xray-core`, and keeps the proxy private to the Docker network by default.
 
+The `xray` service does not set a fixed Docker `container_name`. Docker Compose assigns a project-scoped container name so Dokploy can recreate deployments without colliding with older containers. Other containers should use the stable network alias `xray-proxy`, not the Docker container name.
+
 ## Files
 
 - `docker-compose.yml`: production Compose stack with internal-only proxy exposure.
@@ -236,6 +238,14 @@ compose -f docker-compose.yml -f docker-compose.dokploy.yml up -d --remove-orpha
 ```
 
 Dokploy prefixes custom commands with `docker`, so the command above runs as `docker compose ...`.
+
+If an older deployment used the fixed container name `xray-proxy`, remove that old container once before redeploying:
+
+```sh
+docker rm -f xray-proxy
+```
+
+This removes only the stale Docker container object. The replacement service will still be reachable on Docker networks through the `xray-proxy` alias.
 
 Keep public access authenticated:
 
