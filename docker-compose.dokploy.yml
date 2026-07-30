@@ -1,5 +1,7 @@
 services:
   xray-init:
+    environment:
+      XRAY_CONFIG_PATH: /work/config/config.json
     volumes:
       - type: volume
         source: xray-config

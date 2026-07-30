@@ -27,7 +27,6 @@ services:
           create_host_path: false
     command: ["/bin/sh", "scripts/init-config.sh"]
     network_mode: "none"
-
   xray:
     image: ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG:-26.7.11}
     entrypoint: ["/usr/local/bin/xray"]
@@ -57,7 +56,8 @@ services:
         aliases:
           - ${XRAY_NETWORK_ALIAS:-xray-proxy}
     healthcheck:
-      test: ["CMD", "/usr/local/bin/xray", "run", "-test", "-config", "/usr/local/etc/xray/config.json"]
+      test:
+        ["CMD", "/usr/local/bin/xray", "run", "-test", "-config", "/usr/local/etc/xray/config.json"]
       interval: 30s
       timeout: 10s
       retries: 3

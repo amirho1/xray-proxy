@@ -222,6 +222,8 @@ This override does not make Xray speak TLS. Xray keeps listening as a plain HTTP
 
 For Dokploy deployments, the generated `config.json` is shared between `xray-init` and `xray` through the Compose-managed `xray-config` Docker volume. This keeps Xray from depending on a mutable cloned repo path after deployment. Local non-Dokploy Compose still writes `config/config.json` in the project directory.
 
+The Dokploy override pins `XRAY_CONFIG_PATH` to `/work/config/config.json` inside `xray-init`. Do not override this path in Dokploy; `/work/config` is the named volume that Xray later reads at `/usr/local/etc/xray`.
+
 Configure these values in `.env` or in Dokploy environment variables:
 
 ```env
@@ -495,6 +497,13 @@ docker compose logs -f xray
 Common problems:
 
 - Missing `config/config.json`: run `docker compose run --rm xray-init`, or start the stack with `docker compose up -d`.
+- Missing `/usr/local/etc/xray/config.json` in Dokploy: make sure the deployment uses both compose files, then recreate `xray-init` so it writes into the shared `xray-config` volume:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.dokploy.yml run --rm xray-init
+docker compose -f docker-compose.yml -f docker-compose.dokploy.yml up -d --remove-orphans
+```
+
 - `read /usr/local/etc/xray/config.json: is a directory`: the host path `config/config.json` is a directory. Stop the stack, remove the empty directory, render the config again, validate, then start:
 
 ```sh
