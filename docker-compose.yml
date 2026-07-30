@@ -3,7 +3,7 @@ name: ${COMPOSE_PROJECT_NAME:-xray-proxy}
 services:
   xray-init:
     image: node:22-alpine
-    container_name: proxy_init
+    container_name: proxy-init
     working_dir: /work
     init: true
     restart: "no"
