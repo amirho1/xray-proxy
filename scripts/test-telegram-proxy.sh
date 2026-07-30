@@ -476,9 +476,9 @@ if [ -z "$proxy_evidence" ]; then
 fi
 
 if [ "$http_code" -ge 200 ] && [ "$http_code" -le 399 ]; then
-  printf 'SUCCESS: Telegram request succeeded through the proxy.\n'
+  printf 'SUCCESS: Website request succeeded through the proxy.\n'
   exit 0
 fi
 
-printf 'FAIL: Telegram returned unsuccessful HTTP status %s.\n' "$http_code"
+printf 'FAIL: Website returned unsuccessful HTTP status %s.\n' "$http_code"
 exit 5
