@@ -6,19 +6,23 @@ services:
       - type: volume
         source: xray-config
         target: /work/config
+    networks:
+      - dokploy-network
 
   xray:
     networks:
-      dokploy-network: {}
+      dokploy-network:
+        aliases:
+          - ${XRAY_NETWORK_ALIAS:-xray-proxy}
     volumes:
       - type: volume
         source: xray-config
         target: /usr/local/etc/xray
         read_only: true
     labels:
-      - "traefik.enable=true"
+      - "traefik.enable=${TRAEFIK_ENABLE:-false}"
       - "traefik.docker.network=${DOKPLOY_NETWORK_NAME:-dokploy-network}"
-      - "traefik.tcp.routers.xray-public-proxy.rule=HostSNI(`${PUBLIC_PROXY_DOMAIN:-proxy.insta-shop.ir}`)"
+      - "traefik.tcp.routers.xray-public-proxy.rule=HostSNI(`${PUBLIC_PROXY_DOMAIN:-proxy.example.com}`)"
       - "traefik.tcp.routers.xray-public-proxy.entrypoints=${TRAEFIK_ENTRYPOINT:-websecure}"
       - "traefik.tcp.routers.xray-public-proxy.tls=true"
       - "traefik.tcp.routers.xray-public-proxy.tls.certresolver=${TRAEFIK_CERT_RESOLVER:-letsencrypt}"

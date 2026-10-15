@@ -3,7 +3,6 @@ name: ${COMPOSE_PROJECT_NAME:-xray-proxy}
 services:
   xray-init:
     image: node:22-alpine
-    container_name: proxy-init
     working_dir: /work
     init: true
     restart: "no"
@@ -36,7 +35,6 @@ services:
       - xray-proxy
 
   xray:
-    container_name: proxy
     image: ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG:-26.7.11}
     entrypoint: ["/usr/local/bin/xray"]
     command: ["run", "-config", "/usr/local/etc/xray/config.json"]

@@ -173,3 +173,40 @@ If you published ports to the host via `docker-compose.host.example.yml`:
 ```sh
 curl -x http://username:password@127.0.0.1:8080 https://api.ipify.org?format=json
 ```
+
+---
+
+## Deploying on Dokploy (Internal Proxy for All Services)
+
+Dokploy runs all its applications and services on a shared Docker bridge network called `dokploy-network`.
+
+When deployed on Dokploy with `docker-compose.dokploy.yml`, `xray-proxy` automatically joins `dokploy-network` under the network alias `xray-proxy`.
+
+### How to Deploy in Dokploy UI:
+1. In Dokploy, create a new **Compose** application (pointing to your Git repo or pasting the files).
+2. Set **Compose Path** to:
+   ```text
+   docker-compose.yml,docker-compose.dokploy.yml
+   ```
+3. Set your **Environment Variables** in the Dokploy dashboard:
+   ```env
+   SUBSCRIPTION_URL=https://your-subscription-url
+   PROXY_USERNAME=myuser
+   PROXY_PASSWORD=mypassword
+   DOKPLOY_NETWORK_NAME=dokploy-network
+   ```
+4. Click **Deploy**.
+
+### How Other Dokploy Services Connect:
+Any other container or service running in your Dokploy instance can immediately use the proxy through the internal Docker network:
+
+- **HTTP Proxy**: `http://myuser:mypassword@xray-proxy:8080`
+- **SOCKS5 Proxy**: `socks5h://myuser:mypassword@xray-proxy:1080`
+
+Example in another service's environment variables (e.g. Telegram bot, scraper, n8n, etc.):
+```env
+HTTP_PROXY=http://myuser:mypassword@xray-proxy:8080
+HTTPS_PROXY=http://myuser:mypassword@xray-proxy:8080
+ALL_PROXY=socks5h://myuser:mypassword@xray-proxy:1080
+```
+No ports need to be opened to the public internet. All traffic stays fast and encrypted inside Dokploy's internal network.
