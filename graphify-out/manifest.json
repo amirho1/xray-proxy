@@ -1,0 +1,62 @@
+{
+  "config/config.example.json": {
+    "mtime": 1784636028.7214868,
+    "seen": 1792058839.178569,
+    "ast_hash": "55a9cc840c7fdd312d2c39c0c7dec408",
+    "semantic_hash": "55a9cc840c7fdd312d2c39c0c7dec408"
+  },
+  "scripts/init-config.sh": {
+    "mtime": 1785140750.2949326,
+    "seen": 1792058839.178572,
+    "ast_hash": "9fec505cda1002890b0926df6fd0fd46",
+    "semantic_hash": "9fec505cda1002890b0926df6fd0fd46"
+  },
+  "scripts/render-config.mjs": {
+    "mtime": 1784640229.998076,
+    "seen": 1792058839.1785731,
+    "ast_hash": "e1876e6ad74888dd03ab30b78c03a3be",
+    "semantic_hash": "e1876e6ad74888dd03ab30b78c03a3be"
+  },
+  "scripts/test-telegram-proxy.sh": {
+    "mtime": 1785431230.6887197,
+    "seen": 1792058839.178574,
+    "ast_hash": "aa5cd4dcdc0087b3dcdc5956a3658749",
+    "semantic_hash": "aa5cd4dcdc0087b3dcdc5956a3658749"
+  },
+  "OPENROUTER_PROXY_TLS_DIAGNOSTICS.md": {
+    "mtime": 1785217150.6759982,
+    "seen": 1792058839.178574,
+    "ast_hash": "31387407f6a1ebd3c96bd660295fda69",
+    "semantic_hash": "31387407f6a1ebd3c96bd660295fda69"
+  },
+  "README.md": {
+    "mtime": 1785414899.370307,
+    "seen": 1792058839.178575,
+    "ast_hash": "bec6f523fcafd7cc553b1f9e9063ff38",
+    "semantic_hash": "bec6f523fcafd7cc553b1f9e9063ff38"
+  },
+  "docker-compose.dokploy.yml": {
+    "mtime": 1785414846.0796654,
+    "seen": 1792058839.1785758,
+    "ast_hash": "94b479f18b58ad2b8f09d6f70ca1cbda",
+    "semantic_hash": "94b479f18b58ad2b8f09d6f70ca1cbda"
+  },
+  "docker-compose.host.example.yml": {
+    "mtime": 1784636028.7211998,
+    "seen": 1792058839.1785758,
+    "ast_hash": "e665e8f1efaf5720f0fa29edfa5221ec",
+    "semantic_hash": "e665e8f1efaf5720f0fa29edfa5221ec"
+  },
+  "docker-compose.test.yml": {
+    "mtime": 1785412188.3716602,
+    "seen": 1792058839.178577,
+    "ast_hash": "507b874b3aea41c91f7e5acee0a90587",
+    "semantic_hash": "507b874b3aea41c91f7e5acee0a90587"
+  },
+  "docker-compose.yml": {
+    "mtime": 1785418773.8991046,
+    "seen": 1792058839.178577,
+    "ast_hash": "50733f4709ecf6f3b5070bbbee7a40a8",
+    "semantic_hash": "50733f4709ecf6f3b5070bbbee7a40a8"
+  }
+}

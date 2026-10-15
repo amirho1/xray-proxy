@@ -1,0 +1,215 @@
+{
+  "communities": {
+    "0": [
+      "ref_node_fs",
+      "ref_node_path",
+      "ref_node_process",
+      "scripts_render_config",
+      "scripts_render_config_bool_false",
+      "scripts_render_config_bool_true",
+      "scripts_render_config_reality_methods",
+      "scripts_render_config_supported_security"
+    ],
+    "1": [
+      "scripts_render_config_buildconfig",
+      "scripts_render_config_buildhttpinbound",
+      "scripts_render_config_buildproxyusers",
+      "scripts_render_config_buildsocksinbound",
+      "scripts_render_config_env",
+      "scripts_render_config_loaddotenv",
+      "scripts_render_config_main",
+      "scripts_render_config_prepareoutputpath"
+    ],
+    "2": [
+      "scripts_test_telegram_proxy",
+      "scripts_test_telegram_proxy_cleanup",
+      "scripts_test_telegram_proxy_explain_curl_exit",
+      "scripts_test_telegram_proxy_has_embedded_proxy_credentials",
+      "scripts_test_telegram_proxy_print_diagnostic_tail",
+      "scripts_test_telegram_proxy_redact_proxy_url",
+      "scripts_test_telegram_proxy_sh__entry",
+      "scripts_test_telegram_proxy_usage_error"
+    ],
+    "3": [
+      "docker_compose_dokploy_override",
+      "docker_compose_host_example_override",
+      "docker_compose_test_telegram",
+      "docker_compose_xray",
+      "docker_compose_xray_init",
+      "openrouter_proxy_tls_diagnostics_workflow",
+      "readme_overview"
+    ],
+    "4": [
+      "scripts_render_config_buildstreamsettings",
+      "scripts_render_config_buildvlessoutbound",
+      "scripts_render_config_validaterealitypublickey",
+      "scripts_render_config_validaterealityshortid",
+      "scripts_render_config_validaterealityspiderx"
+    ],
+    "5": [
+      "scripts_test_telegram_proxy_bool_is_false",
+      "scripts_test_telegram_proxy_bool_is_true",
+      "scripts_test_telegram_proxy_join_lines",
+      "scripts_test_telegram_proxy_parse_vless_uri_port",
+      "scripts_test_telegram_proxy_run_self_route_check"
+    ],
+    "6": [
+      "scripts_render_config_normalizetransport",
+      "scripts_render_config_parseport",
+      "scripts_render_config_parsevlessuri",
+      "scripts_render_config_stripipv6brackets"
+    ],
+    "7": [
+      "scripts_render_config_buildtransportsettings",
+      "scripts_render_config_firstparam",
+      "scripts_render_config_parsebool"
+    ],
+    "8": [
+      "scripts_init_config",
+      "scripts_init_config_sh__entry"
+    ],
+    "9": [
+      "scripts_render_config_requiredenv",
+      "scripts_render_config_requirevalue"
+    ],
+    "10": [
+      "scripts_test_telegram_proxy_fetch_direct_egress_ip",
+      "scripts_test_telegram_proxy_single_line"
+    ],
+    "11": [
+      "scripts_test_telegram_proxy_host_for_url",
+      "scripts_test_telegram_proxy_resolve_vless_server_ips"
+    ],
+    "12": [
+      "docker_compose_config_renderer"
+    ]
+  },
+  "cohesion": {
+    "0": 0.25,
+    "1": 0.32142857142857145,
+    "2": 0.39285714285714285,
+    "3": 0.38095238095238093,
+    "4": 0.4,
+    "5": 0.4,
+    "6": 0.5,
+    "7": 0.6666666666666666,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0,
+    "12": 1.0
+  },
+  "gods": [
+    {
+      "id": "scripts_render_config_buildconfig",
+      "label": "buildConfig()",
+      "degree": 11
+    },
+    {
+      "id": "scripts_render_config_buildstreamsettings",
+      "label": "buildStreamSettings()",
+      "degree": 8
+    },
+    {
+      "id": "scripts_test_telegram_proxy_run_self_route_check",
+      "label": "run_self_route_check()",
+      "degree": 8
+    },
+    {
+      "id": "scripts_render_config_parsevlessuri",
+      "label": "parseVlessUri()",
+      "degree": 7
+    },
+    {
+      "id": "scripts_test_telegram_proxy_sh__entry",
+      "label": "test-telegram-proxy.sh script",
+      "degree": 6
+    },
+    {
+      "id": "docker_compose_xray",
+      "label": "xray service",
+      "degree": 6
+    },
+    {
+      "id": "scripts_render_config_env",
+      "label": "env()",
+      "degree": 5
+    },
+    {
+      "id": "scripts_render_config_main",
+      "label": "main()",
+      "degree": 5
+    },
+    {
+      "id": "scripts_render_config_buildtransportsettings",
+      "label": "buildTransportSettings()",
+      "degree": 4
+    },
+    {
+      "id": "scripts_render_config_firstparam",
+      "label": "firstParam()",
+      "degree": 4
+    }
+  ],
+  "surprises": [
+    {
+      "source": "telegram-proxy-test service",
+      "target": "xray service",
+      "source_files": [
+        "docker-compose.test.yml",
+        "docker-compose.yml"
+      ],
+      "confidence": "INFERRED",
+      "relation": "references",
+      "why": "inferred connection - not explicitly stated in source; peripheral node `telegram-proxy-test service` unexpectedly reaches hub `xray service`"
+    },
+    {
+      "source": "Host Port Publishing Override",
+      "target": "xray service",
+      "source_files": [
+        "docker-compose.host.example.yml",
+        "docker-compose.yml"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "peripheral node `Host Port Publishing Override` unexpectedly reaches hub `xray service`"
+    },
+    {
+      "source": "Shahrah Workflow Diagnostics",
+      "target": "xray service",
+      "source_files": [
+        "OPENROUTER_PROXY_TLS_DIAGNOSTICS.md",
+        "docker-compose.yml"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "conceptually_related_to",
+      "why": "peripheral node `Shahrah Workflow Diagnostics` unexpectedly reaches hub `xray service`"
+    },
+    {
+      "source": "Standalone Xray VLESS Proxy Overview",
+      "target": "xray service",
+      "source_files": [
+        "README.md",
+        "docker-compose.yml"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "references",
+      "why": "peripheral node `Standalone Xray VLESS Proxy Overview` unexpectedly reaches hub `xray service`"
+    },
+    {
+      "source": "Dokploy Compose Override",
+      "target": "xray service",
+      "source_files": [
+        "docker-compose.dokploy.yml",
+        "docker-compose.yml"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "implements",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}
