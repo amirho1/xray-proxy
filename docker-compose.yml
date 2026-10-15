@@ -15,9 +15,14 @@ services:
       PROXY_USERNAME: ${PROXY_USERNAME:-}
       SOCKS_ENABLE_UDP: ${SOCKS_ENABLE_UDP:-false}
       SOCKS_PROXY_PORT: ${SOCKS_PROXY_PORT:-1080}
+      SUBSCRIPTION_URL: ${SUBSCRIPTION_URL:-}
+      SUBSCRIPTION_USER_AGENT: ${SUBSCRIPTION_USER_AGENT:-v2rayN/6.23}
+      OBSERVATORY_PROBE_URL: ${OBSERVATORY_PROBE_URL:-https://cp.cloudflare.com/generate_204}
+      OBSERVATORY_PROBE_INTERVAL: ${OBSERVATORY_PROBE_INTERVAL:-30s}
       VLESS_URI: ${VLESS_URI:-}
       XRAY_ACCESS_LOG: ${XRAY_ACCESS_LOG:-none}
       XRAY_CONFIG_PATH: ${XRAY_CONFIG_PATH:-config/config.json}
+      XRAY_CONFIG_GID: ${XRAY_CONFIG_GID:-65532}
       XRAY_ERROR_LOG: ${XRAY_ERROR_LOG:-}
       XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
     volumes:
@@ -27,7 +32,9 @@ services:
         bind:
           create_host_path: false
     command: ["/bin/sh", "scripts/init-config.sh"]
-    network_mode: "none"
+    networks:
+      - xray-proxy
+
   xray:
     container_name: proxy
     image: ghcr.io/xtls/xray-core:${XRAY_IMAGE_TAG:-26.7.11}
@@ -39,6 +46,8 @@ services:
     restart: unless-stopped
     init: true
     read_only: true
+    group_add:
+      - "${XRAY_CONFIG_GID:-65532}"
     cap_drop:
       - ALL
     security_opt:
@@ -80,15 +89,21 @@ services:
       PROXY_USERNAME: ${PROXY_USERNAME:-}
       SOCKS_ENABLE_UDP: ${SOCKS_ENABLE_UDP:-false}
       SOCKS_PROXY_PORT: ${SOCKS_PROXY_PORT:-1080}
+      SUBSCRIPTION_URL: ${SUBSCRIPTION_URL:-}
+      SUBSCRIPTION_USER_AGENT: ${SUBSCRIPTION_USER_AGENT:-v2rayN/6.23}
+      OBSERVATORY_PROBE_URL: ${OBSERVATORY_PROBE_URL:-https://cp.cloudflare.com/generate_204}
+      OBSERVATORY_PROBE_INTERVAL: ${OBSERVATORY_PROBE_INTERVAL:-30s}
       VLESS_URI: ${VLESS_URI:-}
       XRAY_ACCESS_LOG: ${XRAY_ACCESS_LOG:-none}
       XRAY_CONFIG_PATH: ${XRAY_CONFIG_PATH:-config/config.json}
+      XRAY_CONFIG_GID: ${XRAY_CONFIG_GID:-65532}
       XRAY_ERROR_LOG: ${XRAY_ERROR_LOG:-}
       XRAY_LOG_LEVEL: ${XRAY_LOG_LEVEL:-warning}
     volumes:
       - ./:/work
     command: ["node", "scripts/render-config.mjs"]
-    network_mode: "none"
+    networks:
+      - xray-proxy
 
 networks:
   xray-proxy:

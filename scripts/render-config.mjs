@@ -5,31 +5,78 @@ import path from "node:path";
 import process from "node:process";
 
 const DEFAULT_CONFIG_PATH = "config/config.json";
+const DEFAULT_USER_AGENT = "v2rayN/6.23";
+const DEFAULT_PROBE_URL = "https://cp.cloudflare.com/generate_204";
+const DEFAULT_PROBE_INTERVAL = "30s";
+const MAX_SUBSCRIPTION_BYTES = 2 * 1024 * 1024;
+const MAX_SUBSCRIPTION_LINES = 512;
+const MAX_SUBSCRIPTION_OUTBOUNDS = 128;
+const DEFAULT_XRAY_CONFIG_GID = 65532;
+
 const BOOL_TRUE = new Set(["1", "true", "yes", "y", "on"]);
 const BOOL_FALSE = new Set(["0", "false", "no", "n", "off"]);
 const REALITY_METHODS = new Set(["raw", "xhttp", "splithttp", "grpc"]);
 const SUPPORTED_SECURITY = new Set(["none", "tls", "reality"]);
 
-main();
+await main();
 
-function main() {
+async function main() {
   try {
     loadDotEnv(".env");
 
     const outputPath = env("XRAY_CONFIG_PATH", DEFAULT_CONFIG_PATH);
-    const config = buildConfig();
+    const config = await buildConfig();
     prepareOutputPath(outputPath);
-    fs.writeFileSync(outputPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o644 });
-    fs.chmodSync(outputPath, 0o644);
-    console.log(`Rendered Xray config to ${outputPath}`);
+    fs.writeFileSync(outputPath, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o640 });
+    fs.chmodSync(outputPath, 0o640);
+    const outputStat = fs.statSync(outputPath);
+    const gidValue = env("XRAY_CONFIG_GID", String(DEFAULT_XRAY_CONFIG_GID)).trim();
+    const xrayConfigGid = Number(gidValue);
+    if (
+      !/^\d+$/.test(gidValue) ||
+      !Number.isSafeInteger(xrayConfigGid) ||
+      xrayConfigGid > 0xffffffff
+    ) {
+      throw new Error("XRAY_CONFIG_GID must be a non-negative integer.");
+    }
+    fs.chownSync(outputPath, outputStat.uid, xrayConfigGid);
+    fs.chmodSync(outputPath, 0o640);
+    console.log(`Rendered Xray config to ${outputPath} with ${config.outbounds.length} outbounds.`);
   } catch (error) {
     console.error(`Config render failed: ${error.message}`);
     process.exit(1);
   }
 }
 
-function buildConfig() {
-  const parsed = parseVlessUri(requiredEnv("VLESS_URI"));
+async function buildConfig() {
+  const subscriptionUrl = env("SUBSCRIPTION_URL", "").trim();
+  const vlessUri = env("VLESS_URI", "").trim();
+
+  let outbounds = [];
+
+  if (subscriptionUrl) {
+    console.log("Fetching subscription.");
+    try {
+      outbounds = await importSubscription(subscriptionUrl);
+      console.log(`Imported ${outbounds.length} valid outbounds from subscription.`);
+    } catch (err) {
+      console.warn(`Failed to import from SUBSCRIPTION_URL: ${err.message}`);
+    }
+  }
+
+  // Fallback to VLESS_URI if subscription returned no outbounds
+  if (outbounds.length === 0 && vlessUri) {
+    console.log("Using fallback VLESS_URI from environment.");
+    const parsed = parseVlessUri(vlessUri, "proxy-1");
+    outbounds.push(buildVlessOutbound(parsed));
+  }
+
+  if (outbounds.length === 0) {
+    throw new Error(
+      "No valid proxy configurations found. Please provide a working SUBSCRIPTION_URL or VLESS_URI in .env.",
+    );
+  }
+
   const httpPort = parsePort(env("HTTP_PROXY_PORT", "8080"), "HTTP_PROXY_PORT");
   const socksPort = parsePort(env("SOCKS_PROXY_PORT", "1080"), "SOCKS_PROXY_PORT");
   const enableSocks = parseBool(env("ENABLE_SOCKS", "true"), "ENABLE_SOCKS");
@@ -55,11 +102,203 @@ function buildConfig() {
     log.error = errorLog;
   }
 
+  const probeUrl = env("OBSERVATORY_PROBE_URL", DEFAULT_PROBE_URL);
+  const probeInterval = env("OBSERVATORY_PROBE_INTERVAL", DEFAULT_PROBE_INTERVAL);
+
+  const observatory = {
+    subjectSelector: ["proxy-"],
+    probeUrl,
+    probeInterval,
+    enableConcurrency: true,
+  };
+
+  const inboundTags = ["http-in"];
+  if (enableSocks) {
+    inboundTags.push("socks-in");
+  }
+
+  const routing = {
+    domainStrategy: "AsIs",
+    balancers: [
+      {
+        tag: "balancer-fastest",
+        selector: ["proxy-"],
+        strategy: {
+          type: "leastPing",
+        },
+      },
+    ],
+    rules: [
+      {
+        type: "field",
+        inboundTag: inboundTags,
+        balancerTag: "balancer-fastest",
+      },
+    ],
+  };
+
   return {
     log,
     inbounds,
-    outbounds: [buildVlessOutbound(parsed)],
+    observatory,
+    routing,
+    outbounds,
   };
+}
+
+async function importSubscription(subscriptionUrl) {
+  const userAgent = env("SUBSCRIPTION_USER_AGENT", DEFAULT_USER_AGENT);
+  const rawContent = await fetchSubscription(subscriptionUrl, userAgent);
+  const decodedContent = decodeSubscriptionContent(rawContent);
+
+  let lineCount = decodedContent.length > 0 ? 1 : 0;
+  for (let i = 0; i < decodedContent.length; i++) {
+    if (decodedContent[i] === "\n" && i < decodedContent.length - 1) {
+      lineCount++;
+    }
+  }
+  if (lineCount > MAX_SUBSCRIPTION_LINES) {
+    throw new Error(`Subscription exceeds the ${MAX_SUBSCRIPTION_LINES} line limit.`);
+  }
+
+  const lines = decodedContent
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+
+  const outbounds = [];
+  let count = 0;
+
+  for (const line of lines) {
+    let outbound;
+    try {
+      count++;
+      const tag = `proxy-${count}`;
+      outbound = parseProxyUri(line, tag);
+    } catch (err) {
+      console.warn(`[Skip] Could not parse config #${count}: ${err.message}`);
+      continue;
+    }
+
+    if (outbound) {
+      if (outbounds.length >= MAX_SUBSCRIPTION_OUTBOUNDS) {
+        throw new Error(
+          `Subscription exceeds the ${MAX_SUBSCRIPTION_OUTBOUNDS} outbound limit.`,
+        );
+      }
+      outbounds.push(outbound);
+    }
+  }
+
+  return outbounds;
+}
+
+async function fetchSubscription(url, userAgent) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15000);
+
+  try {
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": userAgent,
+        Accept: "*/*",
+      },
+      signal: controller.signal,
+      redirect: "follow",
+    });
+
+    if (!res.ok) {
+      throw new Error(`HTTP ${res.status} ${res.statusText}`);
+    }
+
+    const contentLength = Number(res.headers.get("content-length"));
+    if (Number.isFinite(contentLength) && contentLength > MAX_SUBSCRIPTION_BYTES) {
+      await res.body?.cancel();
+      throw new Error(`Subscription exceeds the ${MAX_SUBSCRIPTION_BYTES}-byte limit.`);
+    }
+
+    if (!res.body) {
+      return "";
+    }
+
+    const reader = res.body.getReader();
+    const chunks = [];
+    let totalBytes = 0;
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+
+        totalBytes += value.byteLength;
+        if (totalBytes > MAX_SUBSCRIPTION_BYTES) {
+          await reader.cancel();
+          throw new Error(`Subscription exceeds the ${MAX_SUBSCRIPTION_BYTES}-byte limit.`);
+        }
+        chunks.push(Buffer.from(value));
+      }
+    } finally {
+      reader.releaseLock();
+    }
+
+    return Buffer.concat(chunks, totalBytes).toString("utf8");
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+function decodeSubscriptionContent(raw) {
+  const trimmed = raw.trim();
+  // If it already looks like plaintext proxy links, return as-is
+  if (
+    trimmed.startsWith("vless://") ||
+    trimmed.startsWith("vmess://") ||
+    trimmed.startsWith("ss://") ||
+    trimmed.startsWith("trojan://")
+  ) {
+    return trimmed;
+  }
+
+  // Try decoding base64 (standard for v2ray subscriptions)
+  try {
+    const cleaned = trimmed.replace(/\s+/g, "");
+    const decoded = Buffer.from(cleaned, "base64").toString("utf8");
+    if (
+      decoded.includes("://") ||
+      decoded.includes("vmess://") ||
+      decoded.includes("vless://") ||
+      decoded.includes("ss://")
+    ) {
+      return decoded;
+    }
+  } catch (err) {
+    // Ignore and fallback
+  }
+
+  return trimmed;
+}
+
+function parseProxyUri(line, tag) {
+  if (line.startsWith("vless://")) {
+    const parsed = parseVlessUri(line, tag);
+    return buildVlessOutbound(parsed);
+  }
+
+  if (line.startsWith("ss://")) {
+    return parseShadowsocksUri(line, tag);
+  }
+
+  if (line.startsWith("vmess://")) {
+    return parseVmessUri(line, tag);
+  }
+
+  if (line.startsWith("trojan://")) {
+    return parseTrojanUri(line, tag);
+  }
+
+  const protocol = line.match(/^([a-z][a-z0-9+.-]*):\/\//i)?.[1] || "unknown";
+  throw new Error(`Unsupported protocol: ${protocol}.`);
 }
 
 function buildProxyUsers(allowNoAuth) {
@@ -131,7 +370,7 @@ function buildVlessOutbound(parsed) {
   }
 
   return {
-    tag: "vless-out",
+    tag: parsed.tag,
     protocol: "vless",
     settings,
     streamSettings: buildStreamSettings(parsed),
@@ -260,34 +499,34 @@ function buildTransportSettings(parsed) {
       return { httpupgradeSettings };
     }
     default:
-      throw new Error(`Unsupported VLESS transport type=${parsed.method}.`);
+      throw new Error(`Unsupported transport type=${parsed.method}.`);
   }
 }
 
-function parseVlessUri(uri) {
+function parseVlessUri(uri, tag) {
   let parsedUrl;
 
   try {
     parsedUrl = new URL(uri.trim());
   } catch (error) {
-    throw new Error(`VLESS_URI is not a valid URI: ${error.message}`);
+    throw new Error(`VLESS URI is not a valid URI: ${error.message}`);
   }
 
   if (parsedUrl.protocol !== "vless:") {
-    throw new Error("VLESS_URI must start with vless://.");
+    throw new Error("VLESS URI must start with vless://.");
   }
 
   const id = decodeURIComponent(parsedUrl.username);
-  requireValue(id, "VLESS_URI must include the UUID/user ID before @.");
+  requireValue(id, "VLESS URI must include the UUID/user ID before @.");
 
   const address = stripIpv6Brackets(parsedUrl.hostname);
-  requireValue(address, "VLESS_URI must include a server address.");
+  requireValue(address, "VLESS URI must include a server address.");
 
   if (!parsedUrl.port) {
-    throw new Error("VLESS_URI must include an explicit server port.");
+    throw new Error("VLESS URI must include an explicit server port.");
   }
 
-  const port = parsePort(parsedUrl.port, "VLESS_URI port");
+  const port = parsePort(parsedUrl.port, "VLESS URI port");
   const params = parsedUrl.searchParams;
   const security = (firstParam(params, ["security"]) || "none").toLowerCase();
   if (!SUPPORTED_SECURITY.has(security)) {
@@ -299,6 +538,7 @@ function parseVlessUri(uri) {
   const flow = firstParam(params, ["flow"]) || "";
 
   return {
+    tag,
     id,
     address,
     port,
@@ -308,6 +548,286 @@ function parseVlessUri(uri) {
     encryption,
     flow,
   };
+}
+
+function parseShadowsocksUri(uri, tag) {
+  let address = "";
+  let port = 0;
+  let method = "";
+  let password = "";
+
+  const trimmed = uri.trim();
+  const hashIdx = trimmed.indexOf("#");
+  const mainPart = hashIdx !== -1 ? trimmed.slice(0, hashIdx) : trimmed;
+  const withoutScheme = mainPart.replace(/^ss:\/\//, "");
+
+  if (withoutScheme.includes("@")) {
+    // SIP002 format: ss://[base64(method:password)]@hostname:port
+    const atIdx = withoutScheme.indexOf("@");
+    const encodedUser = withoutScheme.slice(0, atIdx);
+    const hostPort = withoutScheme.slice(atIdx + 1);
+
+    // Decode user info
+    let decodedUser = decodeURIComponent(encodedUser);
+    try {
+      const b64Decoded = Buffer.from(decodedUser, "base64").toString("utf8");
+      if (b64Decoded.includes(":")) {
+        decodedUser = b64Decoded;
+      }
+    } catch (e) {}
+
+    const colonIdx = decodedUser.indexOf(":");
+    if (colonIdx === -1) {
+      throw new Error("Shadowsocks URI missing cipher method or password.");
+    }
+    method = decodedUser.slice(0, colonIdx);
+    password = decodedUser.slice(colonIdx + 1);
+
+    const parsedHp = parseHostPort(hostPort);
+    address = parsedHp.address;
+    port = parsedHp.port;
+  } else {
+    // Legacy base64 format: ss://base64(method:password@hostname:port)
+    let decoded = "";
+    try {
+      decoded = Buffer.from(decodeURIComponent(withoutScheme), "base64").toString("utf8");
+    } catch (e) {
+      throw new Error(`Shadowsocks legacy decode failed: ${e.message}`);
+    }
+
+    const atIdx = decoded.indexOf("@");
+    if (atIdx === -1) {
+      throw new Error("Invalid Shadowsocks base64 string (missing @).");
+    }
+
+    const userPart = decoded.slice(0, atIdx);
+    const hostPort = decoded.slice(atIdx + 1);
+
+    const colonIdx = userPart.indexOf(":");
+    if (colonIdx === -1) {
+      throw new Error("Shadowsocks URI missing cipher method or password.");
+    }
+    method = userPart.slice(0, colonIdx);
+    password = userPart.slice(colonIdx + 1);
+
+    const parsedHp = parseHostPort(hostPort);
+    address = parsedHp.address;
+    port = parsedHp.port;
+  }
+
+  requireValue(address, "Shadowsocks address is required.");
+  requireValue(method, "Shadowsocks method is required.");
+  requireValue(password, "Shadowsocks password is required.");
+
+  return {
+    tag,
+    protocol: "shadowsocks",
+    settings: {
+      servers: [
+        {
+          address,
+          port,
+          method,
+          password,
+        },
+      ],
+    },
+  };
+}
+
+function parseVmessUri(uri, tag) {
+  const rawBase64 = uri.replace(/^vmess:\/\//, "").trim();
+  let obj;
+  try {
+    const jsonStr = Buffer.from(rawBase64, "base64").toString("utf8");
+    obj = JSON.parse(jsonStr);
+  } catch (err) {
+    throw new Error(`Invalid VMess JSON format: ${err.message}`);
+  }
+
+  const port = Number(obj.port);
+  if (!port || port <= 1 || port > 65535) {
+    throw new Error(`Informational / invalid port in VMess config: ${obj.port}`);
+  }
+
+  const address = String(obj.add || "").trim();
+  if (!address || /[\s\u0600-\u06FF]/.test(address)) {
+    throw new Error(`Invalid server address in VMess config: "${address}"`);
+  }
+
+  const id = String(obj.id || "").trim();
+  requireValue(id, "VMess requires uuid / id.");
+
+  const method = normalizeSubscriptionTransport(obj.net || "tcp");
+  const security = obj.tls === "tls" ? "tls" : "none";
+
+  const streamSettings = {
+    method,
+    security,
+  };
+
+  if (security === "tls") {
+    streamSettings.tlsSettings = {
+      serverName: obj.sni || obj.host || address,
+    };
+    if (obj.fp) {
+      streamSettings.tlsSettings.fingerprint = obj.fp;
+    }
+    if (obj.alpn) {
+      streamSettings.tlsSettings.alpn = String(obj.alpn)
+        .split(",")
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+  }
+
+  if (method === "websocket") {
+    streamSettings.wsSettings = {
+      path: obj.path || "/",
+    };
+    if (obj.host) {
+      streamSettings.wsSettings.headers = { Host: obj.host };
+    }
+  } else if (method === "grpc") {
+    streamSettings.grpcSettings = {
+      serviceName: obj.path || "",
+    };
+  }
+
+  return {
+    tag,
+    protocol: "vmess",
+    settings: {
+      vnext: [
+        {
+          address,
+          port,
+          users: [
+            {
+              id,
+              alterId: Number(obj.aid) || 0,
+              security: obj.scy || "auto",
+            },
+          ],
+        },
+      ],
+    },
+    streamSettings,
+  };
+}
+
+function parseTrojanUri(uri, tag) {
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(uri.trim());
+  } catch (error) {
+    throw new Error(`Trojan URI is not valid: ${error.message}`);
+  }
+
+  const password = decodeURIComponent(parsedUrl.username || "");
+  requireValue(password, "Trojan URI must include password.");
+
+  const address = stripIpv6Brackets(parsedUrl.hostname);
+  requireValue(address, "Trojan URI must include server address.");
+  const port = parsePort(parsedUrl.port, "Trojan URI port");
+
+  const params = parsedUrl.searchParams;
+  const sni = firstParam(params, ["sni", "peer", "serverName"]) || address;
+  const alpn = firstParam(params, ["alpn"]);
+  const fp = firstParam(params, ["fp", "fingerprint"]);
+  const method = normalizeSubscriptionTransport(
+    firstParam(params, ["type", "network"]) || "tcp",
+  );
+
+  const streamSettings = {
+    method,
+    security: "tls",
+    tlsSettings: {
+      serverName: sni,
+    },
+  };
+
+  if (fp) {
+    streamSettings.tlsSettings.fingerprint = fp;
+  }
+  if (alpn) {
+    streamSettings.tlsSettings.alpn = alpn.split(",").map((s) => s.trim()).filter(Boolean);
+  }
+
+  const pathValue = firstParam(params, ["path"]) || "/";
+  const host = firstParam(params, ["host"]);
+
+  if (method === "websocket") {
+    streamSettings.wsSettings = { path: pathValue };
+    if (host) {
+      streamSettings.wsSettings.headers = { Host: host };
+    }
+  } else if (method === "grpc") {
+    const serviceName = firstParam(params, ["serviceName"]) || pathValue.replace(/^\//, "");
+    streamSettings.grpcSettings = { serviceName };
+  }
+
+  return {
+    tag,
+    protocol: "trojan",
+    settings: {
+      servers: [
+        {
+          address,
+          port,
+          password,
+        },
+      ],
+    },
+    streamSettings,
+  };
+}
+
+function normalizeSubscriptionTransport(value) {
+  switch (String(value).toLowerCase()) {
+    case "tcp":
+    case "raw":
+      return "raw";
+    case "ws":
+    case "websocket":
+      return "websocket";
+    case "splithttp":
+    case "xhttp":
+      return "xhttp";
+    case "grpc":
+      return "grpc";
+    case "httpupgrade":
+      return "httpupgrade";
+    default:
+      throw new Error(`Unsupported transport: ${value}.`);
+  }
+}
+
+function parseHostPort(hostPortStr) {
+  let address = "";
+  let port = 0;
+
+  if (hostPortStr.startsWith("[")) {
+    const closeBracket = hostPortStr.indexOf("]");
+    if (closeBracket === -1) {
+      throw new Error(`Invalid IPv6 host: ${hostPortStr}`);
+    }
+    address = hostPortStr.slice(1, closeBracket);
+    const rest = hostPortStr.slice(closeBracket + 1);
+    if (!rest.startsWith(":")) {
+      throw new Error(`Missing port after IPv6 host: ${hostPortStr}`);
+    }
+    port = parsePort(rest.slice(1), "IPv6 port");
+  } else {
+    const colonIdx = hostPortStr.lastIndexOf(":");
+    if (colonIdx === -1) {
+      throw new Error(`Missing port in host:port string "${hostPortStr}"`);
+    }
+    address = hostPortStr.slice(0, colonIdx);
+    port = parsePort(hostPortStr.slice(colonIdx + 1), "Server port");
+  }
+
+  return { address, port };
 }
 
 function normalizeTransport(value) {
@@ -419,12 +939,6 @@ function validateRealitySpiderX(value) {
   if (!value.startsWith("/")) {
     throw new Error("REALITY spx/spiderX must start with /.");
   }
-}
-
-function requiredEnv(name) {
-  const value = env(name, "");
-  requireValue(value, `${name} is required.`);
-  return value;
 }
 
 function env(name, fallback) {
