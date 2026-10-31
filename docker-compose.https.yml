@@ -1,0 +1,11 @@
+services:
+  xray:
+    ports:
+      - "${HTTPS_BIND_IP:-0.0.0.0}:${HTTPS_PROXY_PORT:-443}:8443/tcp"
+    volumes:
+      - type: bind
+        source: ${DEPLOY_TLS_DIR:-./.deployment/tls}
+        target: /run/xray-tls
+        read_only: true
+        bind:
+          create_host_path: false

@@ -1,4 +1,5 @@
 .env
 config/config.json
 .DS_Store
+.deployment/
 graphify-out/cache

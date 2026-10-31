@@ -10,7 +10,7 @@ const DEFAULT_PROBE_URL = "https://cp.cloudflare.com/generate_204";
 const DEFAULT_PROBE_INTERVAL = "30s";
 const MAX_SUBSCRIPTION_BYTES = 2 * 1024 * 1024;
 const MAX_SUBSCRIPTION_LINES = 512;
-const MAX_SUBSCRIPTION_OUTBOUNDS = 128;
+const MAX_SUBSCRIPTION_OUTBOUNDS = 600;
 const DEFAULT_XRAY_CONFIG_GID = 65532;
 
 const BOOL_TRUE = new Set(["1", "true", "yes", "y", "on"]);

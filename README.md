@@ -122,6 +122,50 @@ Xray handles latency testing and routing natively inside its Go core:
 
 ---
 
+## Deploying over SSH with HTTPS on the server IP
+
+Set `SSH_PROXY=root@SERVER_IP` and `SSH_PASSWORD` in your local `.env`, then run:
+
+```sh
+bash scripts/deploy.sh
+```
+
+The shell scripts install Docker on Ubuntu/Debian, clone the default branch from
+GitHub, overlay the current local deployment files, and start the proxy. They
+generate a 64-character random password with `openssl rand -hex 32`, create a
+one-year self-signed certificate with the server IP in its SAN, and publish only
+the authenticated HTTPS proxy on port 443. HTTP and SOCKS ports stay inside Docker.
+Subscription nodes rejected by the installed Xray core are excluded on every deploy.
+
+The generated password and username are saved in `.deployment/client.env` (mode
+`0600`); the public trust certificate is `.deployment/server.crt`. These files are
+ignored by Git. SSH credentials are never copied to the server. Repeated deploys
+reuse the generated password and certificate; use `bash scripts/deploy.sh
+--rotate-password` to generate a new password. The original local `PROXY_PASSWORD`
+is not changed.
+
+The script checks that an unauthenticated request returns HTTP 407 and that an
+authenticated HTTPS request retrieves Telegram, both on the server and from your
+computer. The client uses the downloaded certificate with `--proxy-cacert`, so TLS
+verification remains enabled.
+
+To make a request after deployment, load the generated credentials in your shell:
+
+```sh
+set -a
+. .deployment/client.env
+set +a
+curl --proxy "$PROXY_URL" --proxy-cacert .deployment/server.crt \
+  --proxy-user "$PROXY_USERNAME:$PROXY_PASSWORD" https://telegram.org/
+```
+
+Optional `.env` settings: `DEPLOY_SSH_PORT` (22), `HTTPS_PROXY_PORT` (443),
+`DEPLOY_DIRECTORY` (`/opt/xray-proxy`), `DEPLOY_GIT_REPOSITORY` (this GitHub repo),
+and `DEPLOY_GIT_REF` (GitHub's default branch). The GitHub repository must be readable
+over HTTPS without an interactive login. Each deployment creates a release under
+`/opt/xray-proxy/releases`; `/opt/xray-proxy/current` points to the last verified
+release. The deployment scripts do not push or commit your local changes.
+
 ## Refreshing Subscription Configs
 
 To update the server list from your subscription provider:
